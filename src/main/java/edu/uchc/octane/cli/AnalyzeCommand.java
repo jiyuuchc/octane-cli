@@ -17,16 +17,14 @@ import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PatternOptionBuilder;
 import org.apache.commons.math3.util.FastMath;
 import org.json.JSONException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import edu.uchc.octane.core.datasource.OctaneDataFile;
 import edu.uchc.octane.core.fitting.Fitter;
-import edu.uchc.octane.core.fitting.leastsquare.AsymmetricGaussianPSF;
-import edu.uchc.octane.core.fitting.leastsquare.DAOFitting;
 import edu.uchc.octane.core.fitting.leastsquare.IntegratedGaussianPSF;
 import edu.uchc.octane.core.fitting.leastsquare.LeastSquare;
-import edu.uchc.octane.core.fitting.leastsquare.PSFFittingFunction;
-//import edu.uchc.octane.core.fitting.maximumlikelihood.ConjugateGradient;
-import edu.uchc.octane.core.fitting.maximumlikelihood.LikelihoodModel;
+import edu.uchc.octane.core.fitting.maximumlikelihood.ConjugateGradient;
 import edu.uchc.octane.core.fitting.maximumlikelihood.SymmetricErf;
 import edu.uchc.octane.core.fitting.maximumlikelihood.Simplex;
 import edu.uchc.octane.core.frameanalysis.LocalMaximum;
@@ -36,6 +34,7 @@ import edu.uchc.octane.core.utils.MMTaggedTiff;
 import edu.uchc.octane.core.utils.TaggedImage;
 
 public class AnalyzeCommand {
+	static final Logger logger = LoggerFactory.getLogger(AnalyzeCommand.class);
 	static Options options;
 	static long windowSize = 3;
 	static long thresholdIntensity = 30;
@@ -44,15 +43,17 @@ public class AnalyzeCommand {
 	static int startingFrame = 0;
 	static int endingFrame = -1;
 	static double pixelSize = 65;
-	static boolean multiPeak = false;
-	static boolean asymmetric = false;
-	static boolean useLeastSquare = false;
+//	static boolean multiPeak = false;
+//	static boolean asymmetric = false;
+//	static boolean useLeastSquare = false;
+	static String engine = "ls";
+	static String [] engineList = {"ls", "cg", "simplex"};
 
 	//static List<double[]> positions;
 	//static String [] headers;
 
 	public static Options setupOptions() {
-		options = PatternOptionBuilder.parsePattern("hw%t%b%c%s%e%p%mal");
+		options = PatternOptionBuilder.parsePattern("hw%t%b%c%s%e%p%E:");
 
 		options.getOption("h").setDescription("print this message");
 		options.getOption("w").setDescription("fitting window size");
@@ -62,10 +63,11 @@ public class AnalyzeCommand {
 		options.getOption("s").setDescription("starting frame");
 		options.getOption("e").setDescription("ending frame");
 		options.getOption("p").setDescription("pixel size");
+		options.getOption("E").setDescription("Fitting engine (ls, cg or simplex)");
 
-		options.getOption("m").setDescription("perform multi-peak fitting");
-		options.getOption("a").setDescription("asymmetric psf fitting (for 3D)");
-		options.getOption("l").setDescription("use least square fitter (multi-peak always use least square fitter)");
+//		options.getOption("m").setDescription("perform multi-peak fitting");
+//		options.getOption("a").setDescription("asymmetric psf fitting (for 3D)");
+//		options.getOption("l").setDescription("use least square fitter (multi-peak always use least square fitter)");
 
 		return options;
 	}
@@ -83,8 +85,9 @@ public class AnalyzeCommand {
 		System.out.println("Threshold intensity = " + thresholdIntensity);
 		System.out.println("Fitting window size = " + windowSize);
 		System.out.println("Pixels size = " + pixelSize);
-		System.out.println("Multi-peak fitting: " + (multiPeak?"yes":"no"));
-		System.out.println("3D fitting: " + (asymmetric?"yes":"no"));
+		System.out.println("Fitting engine: " + engine);
+//		System.out.println("Multi-peak fitting: " + (multiPeak?"yes":"no"));
+//		System.out.println("3D fitting: " + (asymmetric?"yes":"no"));
 	}
 
 	public static void run(String [] args) throws JSONException, IOException {
@@ -104,9 +107,17 @@ public class AnalyzeCommand {
 			startingFrame = (int) CommandUtils.getParsedLong(cmd, "s", startingFrame);
 			endingFrame = (int) CommandUtils.getParsedLong(cmd, "e", endingFrame);;
 			pixelSize = CommandUtils.getParsedDouble(cmd, "p", pixelSize);
-			multiPeak = cmd.hasOption("m");
-			asymmetric = cmd.hasOption("a");
-			useLeastSquare = cmd.hasOption("m") || cmd.hasOption("a") || cmd.hasOption("l");
+			if (cmd.hasOption("E")) {
+				engine = cmd.getOptionValue("E").toLowerCase();
+				List<String> l = Arrays.asList(engineList);
+				if (!l.contains(engine)) {
+					printHelp();
+					return;
+				}
+			}
+//			multiPeak = cmd.hasOption("m");
+//			asymmetric = cmd.hasOption("a");
+//			useLeastSquare = cmd.hasOption("m") || cmd.hasOption("a") || cmd.hasOption("l");
 
 			List<String> remainings = cmd.getArgList();
 			if (remainings.size() == 1) {
@@ -167,7 +178,7 @@ public class AnalyzeCommand {
 		for (int f = startingFrame; f < endingFrame; f++) {
 			cnt += results[f].size(); 
 		}
-		String [] tmpHeader = (new SymmetricErf()).getHeaders();
+		String [] tmpHeader = getFitter().getHeaders();
 		String [] headers = Arrays.copyOf(tmpHeader, tmpHeader.length + 1);
 		headers[headers.length-1] = "frame";
 		double [][] data = new double[headers.length][cnt];
@@ -201,28 +212,40 @@ public class AnalyzeCommand {
 		fo.close();
 	}
 
+	static Fitter getFitter() {
+		Fitter fitter;
+		switch (engine) {
+		case "cg": fitter = new ConjugateGradient(new SymmetricErf()); break;
+		case "simplex": fitter = new Simplex(new SymmetricErf()); break;
+		default: fitter = new LeastSquare(new IntegratedGaussianPSF());
+		}
+		return fitter;
+	}
+	
 	static ArrayList<double[]> processFrame(TaggedImage img) throws JSONException {
 		short [] iPixels = (short[]) img.pix;
 		double [] pixels = new double[iPixels.length];
 		for (int i = 0; i < pixels.length; i ++) {
 			pixels[i] = (iPixels[i]&0xffff - backgroundIntensity) / cntsPerPhoton ;
 		}
+
 		RectangularDoubleImage data = new RectangularDoubleImage(pixels, img.tags.getInt("Width"));
 		ArrayList<double[]> particles = new ArrayList();
 
+		Fitter fitter = getFitter();
+		
 		LocalMaximum finder = new LocalMaximum(thresholdIntensity, 0, (int) windowSize);
 		finder.processFrame(data, new LocalMaximum.CallBackFunctions() {
-			LikelihoodModel model =  new SymmetricErf();
-			Fitter fitter = new Simplex(model);
-
 			@Override
 			public boolean fit(RectangularImage subimg, int x, int y) {
 				double [] result = fitter.fit(subimg, null);
 				if (result != null) {
 					if (result[0] < subimg.x0 || result[0] > subimg.x0 + subimg.width || result[1] < subimg.y0 || result[1] > subimg.y0 + subimg.height) {
+						logger.warn("Discard fitting results - out of bound: " + (result[0] - windowSize - subimg.x0) + ", " + (result[1] - subimg.y0 - windowSize));
 						return true;
 					}
 					if (result[3] < 0) {
+						logger.warn("Discard fitting results - negative intensity: " + result[3]);
 						return true;
 					}
 					result[2] = FastMath.abs(result[2]); // make sigma always positive  
