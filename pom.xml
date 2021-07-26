@@ -34,7 +34,14 @@
     	<version>1.7.6</version>
     </dependency>
   </dependencies>
+
   <build>
+  <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+  </resources>
   <plugins>
 	<plugin>
 		<artifactId>maven-jar-plugin</artifactId>
@@ -46,11 +53,6 @@
 					<addClasspath>true</addClasspath>
 				</manifest>
 			</archive>
-		<configuration>
-			<source>1.8</source>
-			<target>1.8</target>
-		</configuration>
-			
 		</configuration>
 	</plugin>
   </plugins>
