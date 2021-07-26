@@ -1,8 +1,10 @@
 package edu.uchc.octane.cli;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -121,8 +123,15 @@ public class AnalyzeCommand {
 
 			List<String> remainings = cmd.getArgList();
 			if (remainings.size() == 1) {
-				String outputFile = remainings.get(0).replaceAll("/+$", "") + ".octane";
-				remainings.add(outputFile);
+				String outputFile = remainings.get(0).replaceAll("/+$", "");
+				if (Files.exists(outputFile + ".csv")) {
+					int idx = 0;
+					while (Files.exists(outputFile + "-" + idx + ".csv")) {
+						idx ++;
+					}
+					outputFile = outputFile + "-" + idx;
+				} 
+				remainings.add(outputFile + ".csv");
 			}
 
 			if (remainings.size() != 2) {
@@ -206,10 +215,12 @@ public class AnalyzeCommand {
 		OctaneDataFile raw = new OctaneDataFile(data, headers);
 
 		System.out.println("Saving to file: " + args.get(1));
-		ObjectOutputStream fo = new ObjectOutputStream(new FileOutputStream(args.get(1)));
-		System.out.println("Output file: " + args.get(1));
-		fo.writeObject(raw);
-		fo.close();
+//		ObjectOutputStream fo = new ObjectOutputStream(new FileOutputStream(args.get(1)));
+//		System.out.println("Output file: " + args.get(1));
+//		fo.writeObject(raw);
+//		fo.close();
+		File outfile = new File(args.get(1));
+		raw.exportToCSV(outfile);
 	}
 
 	static Fitter getFitter() {
