@@ -36,7 +36,7 @@ import edu.uchc.octane.core.utils.TaggedImage;
 public class AnalyzeCommand {
 	static final Logger logger = LoggerFactory.getLogger(AnalyzeCommand.class);
 	static Options options;
-	static long windowSize = 3;
+	static long windowSize = 4;
 	static long thresholdIntensity = 30;
 	static long backgroundIntensity = 0;
 	static double cntsPerPhoton = 1.63;
@@ -226,7 +226,8 @@ public class AnalyzeCommand {
 		short [] iPixels = (short[]) img.pix;
 		double [] pixels = new double[iPixels.length];
 		for (int i = 0; i < pixels.length; i ++) {
-			pixels[i] = (iPixels[i]&0xffff - backgroundIntensity) / cntsPerPhoton ;
+			// double conversion is important. implicit type coversion is BAD!
+			pixels[i] = ((double)(iPixels[i]&0xffff) - backgroundIntensity) / cntsPerPhoton ; 
 		}
 
 		RectangularDoubleImage data = new RectangularDoubleImage(pixels, img.tags.getInt("Width"));
