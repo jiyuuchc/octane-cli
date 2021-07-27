@@ -28,6 +28,7 @@ import edu.uchc.octane.core.fitting.leastsquare.IntegratedGaussianPSF;
 import edu.uchc.octane.core.fitting.leastsquare.LeastSquare;
 import edu.uchc.octane.core.fitting.maximumlikelihood.ConjugateGradient;
 import edu.uchc.octane.core.fitting.maximumlikelihood.SymmetricErf;
+import edu.uchc.octane.core.fitting.maximumlikelihood.SymmetricGaussian;
 import edu.uchc.octane.core.fitting.maximumlikelihood.Simplex;
 import edu.uchc.octane.core.frameanalysis.LocalMaximum;
 import edu.uchc.octane.core.pixelimage.RectangularDoubleImage;
@@ -49,13 +50,13 @@ public class AnalyzeCommand {
 //	static boolean asymmetric = false;
 //	static boolean useLeastSquare = false;
 	static String engine = "ls";
-	static String [] engineList = {"ls", "cg", "simplex"};
+	static String [] engineList = {"ls", "cg", "cgs", "simplex"};
 
 	//static List<double[]> positions;
 	//static String [] headers;
 
 	public static Options setupOptions() {
-		options = PatternOptionBuilder.parsePattern("hw%t%b%c%s%e%p%E:");
+		options = PatternOptionBuilder.parsePattern("hw%t%b%c%s%e%p%E:q");
 
 		options.getOption("h").setDescription("print this message");
 		options.getOption("w").setDescription("fitting window size");
@@ -65,7 +66,8 @@ public class AnalyzeCommand {
 		options.getOption("s").setDescription("starting frame");
 		options.getOption("e").setDescription("ending frame");
 		options.getOption("p").setDescription("pixel size");
-		options.getOption("E").setDescription("Fitting engine (ls, cg or simplex)");
+		options.getOption("E").setDescription("Fitting engine (ls, cg cgs or simplex)");
+		options.getOption("q").setDescription("Suppress logger message");
 
 //		options.getOption("m").setDescription("perform multi-peak fitting");
 //		options.getOption("a").setDescription("asymmetric psf fitting (for 3D)");
@@ -117,21 +119,19 @@ public class AnalyzeCommand {
 					return;
 				}
 			}
+			if (cmd.hasOption("q")) {
+				System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "error");
+			} else {
+				System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "info");
+			}
 //			multiPeak = cmd.hasOption("m");
 //			asymmetric = cmd.hasOption("a");
 //			useLeastSquare = cmd.hasOption("m") || cmd.hasOption("a") || cmd.hasOption("l");
 
 			List<String> remainings = cmd.getArgList();
 			if (remainings.size() == 1) {
-				String outputFile = remainings.get(0).replaceAll("/+$", "");
-				if (Files.exists(outputFile + ".csv")) {
-					int idx = 0;
-					while (Files.exists(outputFile + "-" + idx + ".csv")) {
-						idx ++;
-					}
-					outputFile = outputFile + "-" + idx;
-				} 
-				remainings.add(outputFile + ".csv");
+				String outputFile = remainings.get(0).replaceAll("/+$", "") + ".csv";
+				remainings.add(outputFile);
 			}
 
 			if (remainings.size() != 2) {
@@ -215,18 +215,22 @@ public class AnalyzeCommand {
 		OctaneDataFile raw = new OctaneDataFile(data, headers);
 
 		System.out.println("Saving to file: " + args.get(1));
-//		ObjectOutputStream fo = new ObjectOutputStream(new FileOutputStream(args.get(1)));
-//		System.out.println("Output file: " + args.get(1));
-//		fo.writeObject(raw);
-//		fo.close();
-		File outfile = new File(args.get(1));
-		raw.exportToCSV(outfile);
+		if (args.get(1).endsWith(".octane")) {
+			ObjectOutputStream fo = new ObjectOutputStream(new FileOutputStream(args.get(1)));
+			System.out.println("Output file: " + args.get(1));
+			fo.writeObject(raw);
+			fo.close();
+		} else {
+			File outfile = new File(args.get(1));
+			raw.exportToCSV(outfile);
+		}
 	}
 
 	static Fitter getFitter() {
 		Fitter fitter;
 		switch (engine) {
 		case "cg": fitter = new ConjugateGradient(new SymmetricErf()); break;
+		case "cgs": fitter = new ConjugateGradient(new SymmetricGaussian()); break;
 		case "simplex": fitter = new Simplex(new SymmetricErf()); break;
 		default: fitter = new LeastSquare(new IntegratedGaussianPSF());
 		}
