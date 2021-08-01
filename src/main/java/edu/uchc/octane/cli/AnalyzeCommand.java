@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -205,7 +204,7 @@ public class AnalyzeCommand {
 		
 		for (int h = 0; h < headers.length; h++) {
 			String s = headers[h];
-			if ( s.equals("x") || s.equals("y") || s.equals("z") || s.startsWith("sigma")) {
+			if ( s.startsWith("x") || s.startsWith("y") || s.startsWith("z") || s.startsWith("sigma")) {
 				for (idx = 0 ; idx < cnt; idx ++ ) {
 					data[h][idx]= data[h][idx] * pixelSize;		
 				}
@@ -229,10 +228,11 @@ public class AnalyzeCommand {
 	static Fitter getFitter() {
 		Fitter fitter;
 		switch (engine) {
+		case "ls": fitter = new LeastSquare(new IntegratedGaussianPSF());
 		case "cg": fitter = new ConjugateGradient(new SymmetricErf()); break;
 		case "cgs": fitter = new ConjugateGradient(new SymmetricGaussian()); break;
 		case "simplex": fitter = new Simplex(new SymmetricErf()); break;
-		default: fitter = new LeastSquare(new IntegratedGaussianPSF());
+		default: fitter = new ConjugateGradient(new SymmetricErf()); 
 		}
 		return fitter;
 	}
